@@ -1,5 +1,10 @@
 import cookieParser from "cookie-parser";
-import express from "express";
+import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+  type Router,
+} from "express";
 
 import { config } from "./config";
 import { createDatabase } from "./db/client";
@@ -35,8 +40,8 @@ export async function createApp(options: CreateAppOptions = {}) {
   app.use(authMiddleware);
 
   const authRouter = createAuthRouter({
-    register(router) {
-      router.post("/register", async (request, response, next) => {
+    register(router: Router) {
+      router.post("/register", async (request: Request, response: Response, next: NextFunction) => {
         try {
           const { normalizedEmail, password } = validateCredentials(
             request.body.email ?? "",
@@ -82,8 +87,8 @@ export async function createApp(options: CreateAppOptions = {}) {
         }
       });
     },
-    login(router) {
-      router.post("/login", async (request, response) => {
+    login(router: Router) {
+      router.post("/login", async (request: Request, response: Response) => {
         const email = normalizeEmail(request.body.email ?? "");
         const password = String(request.body.password ?? "");
         const user = await userRepository.findByEmail(email);
@@ -113,7 +118,7 @@ export async function createApp(options: CreateAppOptions = {}) {
         return null;
       }
 
-      return userRepository.findById(request.authUserId);
+      return (await userRepository.findById(request.authUserId)) ?? null;
     },
   });
 

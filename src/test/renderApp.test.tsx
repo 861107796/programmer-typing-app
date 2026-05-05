@@ -3,11 +3,34 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
 import { TypingPanel } from "../components/TypingPanel";
+import { getAllContent } from "../content/contentLibrary";
 import { createSessionState } from "../engine/typingEngine";
 
 async function renderAuthenticatedApp() {
   render(<App />);
   await screen.findByRole("heading", { name: /programmer typing trainer/i });
+}
+
+function getPromptByLabel(label: string) {
+  return (
+    getAllContent().find((item) => item.label === label)?.prompt ?? ""
+  );
+}
+
+function typePrompt(textbox: HTMLElement, prompt: string) {
+  for (const char of prompt) {
+    if (char === "\n") {
+      fireEvent.keyDown(textbox, { key: "Enter" });
+      continue;
+    }
+
+    if (char === "\t") {
+      fireEvent.keyDown(textbox, { key: "Tab" });
+      continue;
+    }
+
+    fireEvent.change(textbox, { target: { value: char } });
+  }
 }
 
 describe("App", () => {
@@ -70,17 +93,28 @@ describe("App", () => {
   it("starts a practice session and shows the result after typing the prompt", async () => {
     await renderAuthenticatedApp();
 
+    fireEvent.click(screen.getByRole("button", { name: /^focused$/i }));
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "technical" },
+    });
+
+    const promptLabel =
+      screen
+        .getByTestId("prompt-text")
+        .closest("section")
+        ?.querySelector("h2")
+        ?.textContent ?? "";
+    const prompt = getPromptByLabel(promptLabel);
+
     fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
     const textbox = screen.getByRole("textbox", { name: /typing input/i });
-    const prompt = screen.getByTestId("prompt-text").textContent ?? "";
+    typePrompt(textbox, prompt);
 
-    for (const char of prompt) {
-      fireEvent.change(textbox, { target: { value: char } });
-    }
-
-    expect(
-      screen.getByRole("heading", { name: /session results/i }),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: /session results/i }),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("does not show the empty content message while seeded content exists", async () => {
@@ -101,9 +135,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
     const textbox = screen.getByRole("textbox", { name: /typing input/i });
 
-    for (const char of initialPrompt) {
-      fireEvent.change(textbox, { target: { value: char } });
-    }
+    typePrompt(textbox, initialPrompt);
 
     await waitFor(() =>
       expect(
@@ -120,18 +152,29 @@ describe("App", () => {
   it("automatically continues to the next prompt after a completed run", async () => {
     await renderAuthenticatedApp();
 
-    const initialPrompt = screen.getByTestId("prompt-text").textContent ?? "";
+    fireEvent.click(screen.getByRole("button", { name: /^focused$/i }));
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "technical" },
+    });
+
+    const initialPromptLabel =
+      screen
+        .getByTestId("prompt-text")
+        .closest("section")
+        ?.querySelector("h2")
+        ?.textContent ?? "";
+    const initialPrompt = getPromptByLabel(initialPromptLabel);
 
     fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
     const textbox = screen.getByRole("textbox", { name: /typing input/i });
 
-    for (const char of initialPrompt) {
-      fireEvent.change(textbox, { target: { value: char } });
-    }
+    typePrompt(textbox, initialPrompt);
 
-    const nextPrompt = screen.getByTestId("prompt-text").textContent ?? "";
-
-    expect(nextPrompt).not.toBe(initialPrompt);
+    await waitFor(() => {
+      const nextPrompt =
+        screen.getByTestId("prompt-text").textContent ?? "";
+      expect(nextPrompt).not.toBe(initialPrompt);
+    });
     expect(
       screen.queryByRole("button", { name: /start practice/i }),
     ).not.toBeInTheDocument();
@@ -160,9 +203,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
     const textbox = screen.getByRole("textbox", { name: /typing input/i });
 
-    for (const char of firstPrompt) {
-      fireEvent.change(textbox, { target: { value: char } });
-    }
+    typePrompt(textbox, firstPrompt);
 
     const secondPrompt = screen.getByTestId("prompt-text").textContent ?? "";
 
@@ -170,6 +211,34 @@ describe("App", () => {
       "const formatPrice = (value: number) => value.toFixed(2);",
     );
     expect(secondPrompt).not.toBe(firstPrompt);
+  });
+
+  it("logs out back to the auth form", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          user: {
+            id: "u1",
+            email: "dev@example.com",
+            createdAt: "2026-05-05T10:00:00.000Z",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true }),
+      });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /log out/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: /sign in/i }),
+    ).toBeInTheDocument();
   });
 
   it("accepts enter and tab as typing input for multiline prompts", () => {
