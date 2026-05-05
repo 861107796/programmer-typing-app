@@ -5,8 +5,8 @@ import { ResultsPanel } from "./components/ResultsPanel";
 import { TypingPanel } from "./components/TypingPanel";
 import { useTypingSession } from "./hooks/useTypingSession";
 
-function TrainerApp() {
-  const session = useTypingSession();
+function TrainerApp({ onAuthExpired }: { onAuthExpired: () => void }) {
+  const session = useTypingSession({ onAuthExpired });
 
   return (
     <main className="app-shell">
@@ -40,6 +40,7 @@ function TrainerApp() {
           sessions={session.sessions}
           dailyChallenge={session.dailyChallenge}
           achievements={session.achievements}
+          progressError={session.progressError}
         />
       </div>
     </main>
@@ -49,7 +50,7 @@ function TrainerApp() {
 export default function App() {
   return (
     <AuthGate>
-      <TrainerApp />
+      {({ onAuthExpired }) => <TrainerApp onAuthExpired={onAuthExpired} />}
     </AuthGate>
   );
 }

@@ -52,10 +52,28 @@ export interface SessionResult {
   valid: boolean;
 }
 
+export interface PersistedSession extends SessionResult {
+  id: string;
+  createdAt: string;
+}
+
 export interface StoredDailyChallenge {
   dateKey: string;
   challengeId: string;
   completed: boolean;
   bestWpm: number;
   bestAccuracy: number;
+}
+
+export interface PersistedAchievement {
+  id: string;
+  progress: number;
+  unlocked: boolean;
+  unlockedAt: string | null;
+}
+
+export interface ProgressSnapshotResponse {
+  sessions: PersistedSession[];
+  achievements: PersistedAchievement[];
+  dailyChallenge: StoredDailyChallenge | null;
 }

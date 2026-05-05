@@ -13,8 +13,12 @@ import {
   authMiddleware,
   type AuthenticatedRequest,
 } from "./middleware/auth";
+import { createAchievementRepository } from "./repositories/achievementRepository";
+import { createDailyChallengeRepository } from "./repositories/dailyChallengeRepository";
+import { createSessionRepository } from "./repositories/sessionRepository";
 import { createUserRepository } from "./repositories/userRepository";
 import { createAuthRouter } from "./routes/auth";
+import { createProgressRouter } from "./routes/progress";
 import {
   hashPassword,
   normalizeEmail,
@@ -22,6 +26,7 @@ import {
   validateCredentials,
   verifyPassword,
 } from "./services/authService";
+import { createProgressService } from "./services/progressService";
 
 interface CreateAppOptions {
   databasePath?: string;
@@ -32,6 +37,14 @@ export async function createApp(options: CreateAppOptions = {}) {
   const db = await createDatabase(databasePath);
   await initDatabase(db);
   const userRepository = createUserRepository(db);
+  const sessionRepository = createSessionRepository(db);
+  const achievementRepository = createAchievementRepository(db);
+  const dailyChallengeRepository = createDailyChallengeRepository(db);
+  const progressService = createProgressService({
+    sessionRepository,
+    achievementRepository,
+    dailyChallengeRepository,
+  });
 
   const app = express();
 
@@ -123,6 +136,7 @@ export async function createApp(options: CreateAppOptions = {}) {
   });
 
   app.use("/api/auth", authRouter);
+  app.use("/api", createProgressRouter({ progressService }));
 
   app.use((_error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     response.status(500).json({ error: "Internal server error" });

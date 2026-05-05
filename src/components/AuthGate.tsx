@@ -4,9 +4,22 @@ import * as authApi from "../auth/authApi";
 import { useAuth } from "../auth/useAuth";
 import { AuthForm } from "./AuthForm";
 
-export function AuthGate({ children }: { children: ReactNode }) {
+interface AuthGateRenderProps {
+  onAuthExpired: () => void;
+}
+
+export function AuthGate({
+  children,
+}: {
+  children: ReactNode | ((props: AuthGateRenderProps) => ReactNode);
+}) {
   const { user, setUser, loading, error, setError } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
+
+  const handleExpiredSession = () => {
+    setError("Session expired. Please sign in again.");
+    setUser(null);
+  };
 
   if (loading) {
     return (
@@ -72,7 +85,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
           Log Out
         </button>
       </header>
-      {children}
+      {typeof children === "function"
+        ? children({ onAuthExpired: handleExpiredSession })
+        : children}
     </>
   );
 }

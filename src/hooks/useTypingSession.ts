@@ -7,6 +7,7 @@ import {
 } from "../content/contentLibrary";
 import type {
   ContentItem,
+  PersistedSession,
   PracticeCategory,
   PracticeMode,
   SessionResult,
@@ -18,14 +19,17 @@ import {
   handleCharacterInput,
 } from "../engine/typingEngine";
 import type { TypingSessionState } from "../engine/typingEngine";
+import type { AchievementState } from "../progress/achievementRules";
 import {
-  evaluateAchievements,
-  type AchievementState,
-} from "../progress/achievementRules";
-import { createProgressRepository } from "../progress/storage";
+  fetchProgressSnapshot,
+  isUnauthorizedProgressError,
+  saveCompletedSession,
+} from "../progress/progressApi";
+import {
+  mapAchievementSnapshot,
+  mapSessionSnapshot,
+} from "../progress/progressMappers";
 import { calculateSessionResult } from "../scoring/sessionScoring";
-
-const repository = createProgressRepository(window.localStorage);
 
 interface UseTypingSessionValue {
   mode: PracticeMode;
@@ -35,13 +39,18 @@ interface UseTypingSessionValue {
   content: ContentItem | null;
   sessionState: TypingSessionState;
   result: SessionResult | null;
-  sessions: SessionResult[];
+  sessions: PersistedSession[];
   achievements: AchievementState[];
   dailyChallenge: StoredDailyChallenge | null;
+  progressError: string | null;
   startSession: () => void;
   inputCharacter: (char: string) => void;
   backspace: () => void;
   nextSession: () => void;
+}
+
+interface UseTypingSessionOptions {
+  onAuthExpired: () => void;
 }
 
 function getDateKey() {
@@ -75,7 +84,9 @@ function getQueueForMode(
   return shuffleContent(getMixedPracticeSet(6));
 }
 
-export function useTypingSession(): UseTypingSessionValue {
+export function useTypingSession({
+  onAuthExpired,
+}: UseTypingSessionOptions): UseTypingSessionValue {
   const [mode, setMode] = useState<PracticeMode>("mixed");
   const [focusedCategory, setFocusedCategory] =
     useState<PracticeCategory>("code");
@@ -86,16 +97,13 @@ export function useTypingSession(): UseTypingSessionValue {
   const [sessionState, setSessionState] = useState<TypingSessionState>(() =>
     createSessionState(""),
   );
-  const [sessions, setSessions] = useState<SessionResult[]>(() =>
-    repository.getSessions(),
-  );
-  const [achievements, setAchievements] = useState<AchievementState[]>(() =>
-    repository.getAchievements(),
-  );
+  const [sessions, setSessions] = useState<PersistedSession[]>([]);
+  const [achievements, setAchievements] = useState<AchievementState[]>([]);
   const [dailyChallenge, setDailyChallenge] = useState<StoredDailyChallenge | null>(
-    () => repository.getDailyChallenge(getDateKey()),
+    null,
   );
   const [latestResult, setLatestResult] = useState<SessionResult | null>(null);
+  const [progressError, setProgressError] = useState<string | null>(null);
   const savedResultKey = useRef<string | null>(null);
 
   const content = useMemo(
@@ -121,6 +129,40 @@ export function useTypingSession(): UseTypingSessionValue {
   }, [content, mode, sessionState]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    fetchProgressSnapshot()
+      .then((snapshot) => {
+        if (cancelled) {
+          return;
+        }
+
+        setSessions(mapSessionSnapshot(snapshot.sessions));
+        setAchievements(mapAchievementSnapshot(snapshot.achievements));
+        setDailyChallenge(snapshot.dailyChallenge);
+        setProgressError(null);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (isUnauthorizedProgressError(error)) {
+          onAuthExpired();
+          return;
+        }
+
+        setProgressError(
+          error instanceof Error ? error.message : "Progress bootstrap failed",
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onAuthExpired]);
+
+  useEffect(() => {
     const nextQueue = getQueueForMode(mode, focusedCategory, getDateKey());
     setPromptQueue(nextQueue);
     setQueueIndex(0);
@@ -141,31 +183,23 @@ export function useTypingSession(): UseTypingSessionValue {
     savedResultKey.current = resultKey;
     setLatestResult(completedResult);
 
-    repository.saveSession(completedResult);
-    setSessions(repository.getSessions());
+    saveCompletedSession(completedResult)
+      .then((snapshot) => {
+        setSessions(mapSessionSnapshot(snapshot.sessions));
+        setAchievements(mapAchievementSnapshot(snapshot.achievements));
+        setDailyChallenge(snapshot.dailyChallenge);
+        setProgressError(null);
+      })
+      .catch((error) => {
+        if (isUnauthorizedProgressError(error)) {
+          onAuthExpired();
+          return;
+        }
 
-    const nextAchievements = evaluateAchievements(
-      repository.getAchievements(),
-      completedResult,
-    );
-    repository.saveAchievements(nextAchievements);
-    setAchievements(nextAchievements);
-
-    if (mode === "daily") {
-      const nextDailyChallenge: StoredDailyChallenge = {
-        dateKey: getDateKey(),
-        challengeId: content.id,
-        completed: true,
-        bestWpm: Math.max(dailyChallenge?.bestWpm ?? 0, completedResult.wpm),
-        bestAccuracy: Math.max(
-          dailyChallenge?.bestAccuracy ?? 0,
-          completedResult.accuracy,
-        ),
-      };
-      repository.saveDailyChallenge(nextDailyChallenge);
-      setDailyChallenge(nextDailyChallenge);
-      return;
-    }
+        setProgressError(
+          error instanceof Error ? error.message : "Session sync failed",
+        );
+      });
 
     const nextIndex = queueIndex + 1;
     const nextQueue =
@@ -185,9 +219,9 @@ export function useTypingSession(): UseTypingSessionValue {
   }, [
     completedResult,
     content,
-    dailyChallenge,
     focusedCategory,
     mode,
+    onAuthExpired,
     promptQueue,
     queueIndex,
     sessionState.completedAt,
@@ -220,7 +254,6 @@ export function useTypingSession(): UseTypingSessionValue {
         : promptQueue;
     const normalizedIndex = nextIndex >= promptQueue.length ? 0 : nextIndex;
     const nextContent = nextQueue[normalizedIndex] ?? null;
-    setDailyChallenge(repository.getDailyChallenge(getDateKey()));
     setLatestResult(null);
 
     if (nextContent) {
@@ -243,6 +276,7 @@ export function useTypingSession(): UseTypingSessionValue {
     sessions,
     achievements,
     dailyChallenge,
+    progressError,
     startSession,
     inputCharacter,
     backspace,
