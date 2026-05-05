@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { fetchBackendDailyChallenge } from "../admin/adminApi";
 import {
   getContentByCategory,
   getDailyChallenge,
   getMixedPracticeSet,
 } from "../content/contentLibrary";
 import type {
+  BackendDailyChallengeResponse,
   ContentItem,
   PersistedSession,
   PracticeCategory,
@@ -72,13 +74,14 @@ function getQueueForMode(
   mode: PracticeMode,
   focusedCategory: PracticeCategory,
   dateKey: string,
+  backendDailyChallenge: BackendDailyChallengeResponse | null,
 ): ContentItem[] {
   if (mode === "focused") {
     return shuffleContent(getContentByCategory(focusedCategory));
   }
 
   if (mode === "daily") {
-    return [getDailyChallenge(dateKey).content];
+    return [backendDailyChallenge?.content ?? getDailyChallenge(dateKey).content];
   }
 
   return shuffleContent(getMixedPracticeSet(6));
@@ -90,8 +93,10 @@ export function useTypingSession({
   const [mode, setMode] = useState<PracticeMode>("mixed");
   const [focusedCategory, setFocusedCategory] =
     useState<PracticeCategory>("code");
+  const [backendDailyChallenge, setBackendDailyChallenge] =
+    useState<BackendDailyChallengeResponse | null>(null);
   const [promptQueue, setPromptQueue] = useState<ContentItem[]>(() =>
-    getQueueForMode("mixed", "code", getDateKey()),
+    getQueueForMode("mixed", "code", getDateKey(), null),
   );
   const [queueIndex, setQueueIndex] = useState(0);
   const [sessionState, setSessionState] = useState<TypingSessionState>(() =>
@@ -163,13 +168,63 @@ export function useTypingSession({
   }, [onAuthExpired]);
 
   useEffect(() => {
-    const nextQueue = getQueueForMode(mode, focusedCategory, getDateKey());
+    if (mode !== "daily") {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchBackendDailyChallenge()
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+
+        setBackendDailyChallenge(payload);
+        setDailyChallenge((currentChallenge) => ({
+          dateKey: payload.dateKey,
+          challengeId: payload.content.id,
+          completed: currentChallenge?.completed ?? false,
+          bestWpm: currentChallenge?.bestWpm ?? 0,
+          bestAccuracy: currentChallenge?.bestAccuracy ?? 0,
+        }));
+        setProgressError(null);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (error instanceof Error && error.message === "AUTH_EXPIRED") {
+          onAuthExpired();
+          return;
+        }
+
+        setProgressError(
+          error instanceof Error
+            ? error.message
+            : "Daily challenge fetch failed",
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, onAuthExpired]);
+
+  useEffect(() => {
+    const nextQueue = getQueueForMode(
+      mode,
+      focusedCategory,
+      getDateKey(),
+      backendDailyChallenge,
+    );
     setPromptQueue(nextQueue);
     setQueueIndex(0);
     setSessionState(createSessionState(""));
     setLatestResult(null);
     savedResultKey.current = null;
-  }, [mode, focusedCategory]);
+  }, [backendDailyChallenge, focusedCategory, mode]);
 
   useEffect(() => {
     if (!completedResult || !content || !sessionState.completedAt) {
@@ -204,7 +259,12 @@ export function useTypingSession({
     const nextIndex = queueIndex + 1;
     const nextQueue =
       nextIndex >= promptQueue.length
-        ? getQueueForMode(mode, focusedCategory, getDateKey())
+        ? getQueueForMode(
+            mode,
+            focusedCategory,
+            getDateKey(),
+            backendDailyChallenge,
+          )
         : promptQueue;
     const normalizedIndex = nextIndex >= promptQueue.length ? 0 : nextIndex;
     const nextContent = nextQueue[normalizedIndex] ?? null;
@@ -219,6 +279,7 @@ export function useTypingSession({
   }, [
     completedResult,
     content,
+    backendDailyChallenge,
     focusedCategory,
     mode,
     onAuthExpired,
@@ -250,7 +311,12 @@ export function useTypingSession({
     const nextIndex = queueIndex + 1;
     const nextQueue =
       nextIndex >= promptQueue.length
-        ? getQueueForMode(mode, focusedCategory, getDateKey())
+        ? getQueueForMode(
+            mode,
+            focusedCategory,
+            getDateKey(),
+            backendDailyChallenge,
+          )
         : promptQueue;
     const normalizedIndex = nextIndex >= promptQueue.length ? 0 : nextIndex;
     const nextContent = nextQueue[normalizedIndex] ?? null;

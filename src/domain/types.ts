@@ -102,3 +102,36 @@ export interface PersonalLeaderboardResponse {
   daily: PersonalLeaderboardSummary | null;
   global: PersonalLeaderboardSummary | null;
 }
+
+export interface AdminContentItem {
+  id: string;
+  category: PracticeCategory;
+  topic: PracticeTopic;
+  difficulty: PracticeDifficulty;
+  length: PracticeLength;
+  label: string;
+  prompt: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminContentListResponse {
+  items: AdminContentItem[];
+}
+
+export interface AdminChallengeAssignment {
+  dateKey: string;
+  contentItemId: string;
+  source: "manual" | "generated";
+}
+
+export interface AdminChallengeListResponse {
+  assignments: AdminChallengeAssignment[];
+}
+
+export interface BackendDailyChallengeResponse {
+  dateKey: string;
+  source: "manual" | "generated";
+  content: ContentItem;
+}

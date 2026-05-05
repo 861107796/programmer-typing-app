@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { AdminView } from "./components/AdminView";
 import { AuthGate } from "./components/AuthGate";
 import { LeaderboardView } from "./components/LeaderboardView";
 import { ModePicker } from "./components/ModePicker";
@@ -8,7 +9,7 @@ import { ResultsPanel } from "./components/ResultsPanel";
 import { TypingPanel } from "./components/TypingPanel";
 import { useTypingSession } from "./hooks/useTypingSession";
 
-type AppView = "trainer" | "leaderboard";
+type AppView = "trainer" | "leaderboard" | "admin";
 
 function TrainerApp({ onAuthExpired }: { onAuthExpired: () => void }) {
   const [view, setView] = useState<AppView>("trainer");
@@ -33,8 +34,17 @@ function TrainerApp({ onAuthExpired }: { onAuthExpired: () => void }) {
             >
               Leaderboard
             </button>
+            <button
+              type="button"
+              className={view === "admin" ? "is-active" : undefined}
+              onClick={() => setView("admin")}
+            >
+              Admin
+            </button>
           </div>
-          {view === "trainer" ? (
+          {view === "admin" ? (
+            <AdminView onAuthExpired={onAuthExpired} />
+          ) : view === "trainer" ? (
             <>
               <p className="eyebrow">Phase 1</p>
               <h1>Programmer Typing Trainer</h1>

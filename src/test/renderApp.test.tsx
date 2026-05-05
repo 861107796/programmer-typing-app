@@ -5,6 +5,9 @@ import App from "../App";
 import { TypingPanel } from "../components/TypingPanel";
 import { getAllContent } from "../content/contentLibrary";
 import type {
+  AdminChallengeAssignment,
+  AdminContentItem,
+  BackendDailyChallengeResponse,
   LeaderboardResponse,
   PersonalLeaderboardResponse,
   ProgressSnapshotResponse,
@@ -43,6 +46,14 @@ function createFetchMock(options?: {
   globalLeaderboardStatus?: number;
   myLeaderboard?: PersonalLeaderboardResponse;
   myLeaderboardStatus?: number;
+  adminContentList?: { items: AdminContentItem[] };
+  adminContentCreateResponse?: AdminContentItem;
+  adminContentUpdateResponse?: AdminContentItem;
+  adminContentDeleteStatus?: number;
+  adminDailyChallengeList?: { assignments: AdminChallengeAssignment[] };
+  adminDailyChallengeAssignResponse?: AdminChallengeAssignment;
+  adminDailyChallengeGenerateResponse?: AdminChallengeAssignment;
+  contentDailyChallenge?: BackendDailyChallengeResponse;
 }) {
   const currentUser =
     options && "currentUser" in options ? options.currentUser : defaultUser;
@@ -55,6 +66,23 @@ function createFetchMock(options?: {
   const globalLeaderboardStatus = options?.globalLeaderboardStatus ?? 200;
   const myLeaderboard = options?.myLeaderboard ?? { daily: null, global: null };
   const myLeaderboardStatus = options?.myLeaderboardStatus ?? 200;
+  const adminContentList = options?.adminContentList ?? { items: [] };
+  const adminContentCreateResponse = options?.adminContentCreateResponse;
+  const adminContentUpdateResponse = options?.adminContentUpdateResponse;
+  const adminContentDeleteStatus = options?.adminContentDeleteStatus ?? 204;
+  const adminDailyChallengeList = options?.adminDailyChallengeList ?? {
+    assignments: [],
+  };
+  const adminDailyChallengeAssignResponse =
+    options?.adminDailyChallengeAssignResponse;
+  const adminDailyChallengeGenerateResponse =
+    options?.adminDailyChallengeGenerateResponse;
+  const contentDailyChallenge =
+    options?.contentDailyChallenge ?? {
+      dateKey: "2026-05-05",
+      source: "generated" as const,
+      content: getAllContent()[0],
+    };
 
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -73,6 +101,51 @@ function createFetchMock(options?: {
         saveSessionStatus >= 200 && saveSessionStatus < 300,
         saveSessionStatus,
       );
+    }
+
+    if (
+      url.startsWith("/api/admin/content") &&
+      (init?.method ?? "GET") === "GET"
+    ) {
+      return jsonResponse(adminContentList);
+    }
+
+    if (url === "/api/admin/content" && init?.method === "POST") {
+      return jsonResponse(adminContentCreateResponse);
+    }
+
+    if (url.startsWith("/api/admin/content/") && init?.method === "PUT") {
+      return jsonResponse(adminContentUpdateResponse);
+    }
+
+    if (url.startsWith("/api/admin/content/") && init?.method === "DELETE") {
+      return jsonResponse(
+        {},
+        adminContentDeleteStatus >= 200 && adminContentDeleteStatus < 300,
+        adminContentDeleteStatus,
+      );
+    }
+
+    if (
+      url.startsWith("/api/admin/daily-challenge") &&
+      (init?.method ?? "GET") === "GET"
+    ) {
+      return jsonResponse(adminDailyChallengeList);
+    }
+
+    if (
+      url.startsWith("/api/admin/daily-challenge/") &&
+      init?.method === "PUT"
+    ) {
+      return jsonResponse(adminDailyChallengeAssignResponse);
+    }
+
+    if (url === "/api/admin/daily-challenge/generate" && init?.method === "POST") {
+      return jsonResponse(adminDailyChallengeGenerateResponse);
+    }
+
+    if (url === "/api/content/daily-challenge") {
+      return jsonResponse(contentDailyChallenge);
     }
 
     if (url === "/api/leaderboard/daily") {
@@ -117,12 +190,6 @@ async function renderAuthenticatedApp() {
   await screen.findByText(/sessions saved to cloud/i);
 }
 
-function getPromptByLabel(label: string) {
-  return (
-    getAllContent().find((item) => item.label === label)?.prompt ?? ""
-  );
-}
-
 function typePrompt(textbox: HTMLElement, prompt: string) {
   for (const char of prompt) {
     if (char === "\n") {
@@ -145,13 +212,7 @@ async function completeFocusedTechnicalPrompt() {
     target: { value: "technical" },
   });
 
-  const promptLabel =
-    screen
-      .getByTestId("prompt-text")
-      .closest("section")
-      ?.querySelector("h2")
-      ?.textContent ?? "";
-  const prompt = getPromptByLabel(promptLabel);
+  const prompt = screen.getByTestId("prompt-text").textContent ?? "";
 
   fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
   const textbox = screen.getByRole("textbox", { name: /typing input/i });
@@ -245,17 +306,11 @@ describe("App", () => {
     await renderAuthenticatedApp();
 
     fireEvent.click(screen.getByRole("button", { name: /^focused$/i }));
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "technical" },
-    });
+  fireEvent.change(screen.getByRole("combobox"), {
+    target: { value: "technical" },
+  });
 
-    const initialPromptLabel =
-      screen
-        .getByTestId("prompt-text")
-        .closest("section")
-        ?.querySelector("h2")
-        ?.textContent ?? "";
-    const initialPrompt = getPromptByLabel(initialPromptLabel);
+    const initialPrompt = screen.getByTestId("prompt-text").textContent ?? "";
 
     fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
     const textbox = screen.getByRole("textbox", { name: /typing input/i });
@@ -569,5 +624,79 @@ describe("App", () => {
     expect(
       screen.getByText(/session expired\. please sign in again\./i),
     ).toBeInTheDocument();
+  });
+
+  it("renders the admin content list and creates a prompt", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        adminContentList: { items: [] },
+        adminContentCreateResponse: {
+          id: "content-1",
+          category: "code",
+          topic: "typescript",
+          difficulty: "medium",
+          length: "short",
+          label: "Typed formatter",
+          prompt: "const formatPrice = (value: number) => value.toFixed(2);",
+          isActive: true,
+          createdAt: "2026-05-05T12:00:00.000Z",
+          updatedAt: "2026-05-05T12:00:00.000Z",
+        },
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    fireEvent.click(screen.getByRole("button", { name: /^admin$/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: /content admin/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /new prompt/i }));
+    fireEvent.change(screen.getByLabelText(/label/i), {
+      target: { value: "Typed formatter" },
+    });
+    fireEvent.change(screen.getByLabelText(/prompt/i), {
+      target: {
+        value: "const formatPrice = (value: number) => value.toFixed(2);",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save prompt/i }));
+
+    expect(await screen.findByText(/typed formatter/i)).toBeInTheDocument();
+  });
+
+  it("hydrates daily challenge mode from the backend content source", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        contentDailyChallenge: {
+          dateKey: "2026-05-05",
+          source: "manual",
+          content: {
+            id: "content-1",
+            category: "technical",
+            topic: "api",
+            difficulty: "medium",
+            length: "medium",
+            label: "HTTP retry note",
+            prompt: "Retry idempotent HTTP requests with exponential backoff.",
+          },
+        },
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    fireEvent.click(screen.getByRole("button", { name: /daily challenge/i }));
+
+    expect(await screen.findByText(/http retry note/i)).toBeInTheDocument();
+    expect(screen.getByTestId("prompt-text").textContent).toContain(
+      "Retry idempotent HTTP requests with exponential backoff.",
+    );
   });
 });

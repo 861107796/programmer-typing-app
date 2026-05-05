@@ -45,5 +45,26 @@ export async function initDatabase(db: Database) {
       updated_at text not null,
       primary key (user_id, date_key)
     );
+
+    create table if not exists content_items (
+      id text primary key,
+      category text not null,
+      topic text not null,
+      difficulty text not null,
+      length text not null,
+      label text not null,
+      prompt text not null,
+      is_active integer not null,
+      created_at text not null,
+      updated_at text not null
+    );
+
+    create table if not exists daily_challenge_assignments (
+      date_key text primary key,
+      content_item_id text not null,
+      source text not null,
+      created_at text not null,
+      updated_at text not null
+    );
   `);
 }

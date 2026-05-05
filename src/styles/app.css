@@ -156,19 +156,31 @@ textarea {
   margin-top: 0;
 }
 
+.admin-card {
+  margin-top: 0;
+  padding: 20px;
+  border-radius: 18px;
+  background: rgba(22, 38, 68, 0.65);
+}
+
 .leaderboard-header,
-.leaderboard-tabs {
+.leaderboard-tabs,
+.admin-tabs,
+.admin-actions,
+.admin-form__actions {
   display: flex;
   gap: 12px;
 }
 
-.leaderboard-header {
+.leaderboard-header,
+.admin-header {
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 20px;
 }
 
-.leaderboard-tabs {
+.leaderboard-tabs,
+.admin-tabs {
   flex-wrap: wrap;
 }
 
@@ -211,6 +223,28 @@ textarea {
 
 .leaderboard-summary p {
   margin-top: 10px;
+}
+
+.admin-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.admin-item {
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(5, 10, 19, 0.55);
+}
+
+.admin-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.admin-error {
+  color: var(--danger);
 }
 
 .mode-picker__buttons {
@@ -305,6 +339,10 @@ textarea {
   }
 
   .leaderboard-header {
+    flex-direction: column;
+  }
+
+  .admin-header {
     flex-direction: column;
   }
 }

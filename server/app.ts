@@ -14,11 +14,15 @@ import {
   type AuthenticatedRequest,
 } from "./middleware/auth";
 import { createAchievementRepository } from "./repositories/achievementRepository";
+import { createChallengeAssignmentRepository } from "./repositories/challengeAssignmentRepository";
+import { createContentRepository } from "./repositories/contentRepository";
 import { createDailyChallengeRepository } from "./repositories/dailyChallengeRepository";
 import { createLeaderboardRepository } from "./repositories/leaderboardRepository";
 import { createSessionRepository } from "./repositories/sessionRepository";
 import { createUserRepository } from "./repositories/userRepository";
+import { createAdminRouter } from "./routes/admin";
 import { createAuthRouter } from "./routes/auth";
+import { createContentRouter } from "./routes/content";
 import { createLeaderboardRouter } from "./routes/leaderboard";
 import { createProgressRouter } from "./routes/progress";
 import {
@@ -28,6 +32,7 @@ import {
   validateCredentials,
   verifyPassword,
 } from "./services/authService";
+import { createContentService } from "./services/contentService";
 import { createLeaderboardService } from "./services/leaderboardService";
 import { createProgressService } from "./services/progressService";
 
@@ -43,11 +48,17 @@ export async function createApp(options: CreateAppOptions = {}) {
   const sessionRepository = createSessionRepository(db);
   const achievementRepository = createAchievementRepository(db);
   const dailyChallengeRepository = createDailyChallengeRepository(db);
+  const contentRepository = createContentRepository(db);
+  const challengeAssignmentRepository = createChallengeAssignmentRepository(db);
   const leaderboardRepository = createLeaderboardRepository(db);
   const progressService = createProgressService({
     sessionRepository,
     achievementRepository,
     dailyChallengeRepository,
+  });
+  const contentService = createContentService({
+    contentRepository,
+    challengeAssignmentRepository,
   });
   const leaderboardService = createLeaderboardService({
     leaderboardRepository,
@@ -143,6 +154,8 @@ export async function createApp(options: CreateAppOptions = {}) {
   });
 
   app.use("/api/auth", authRouter);
+  app.use("/api/admin", createAdminRouter({ contentService }));
+  app.use("/api/content", createContentRouter({ contentService }));
   app.use("/api", createProgressRouter({ progressService }));
   app.use("/api/leaderboard", createLeaderboardRouter({ leaderboardService }));
 
