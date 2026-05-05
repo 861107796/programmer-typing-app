@@ -1,12 +1,25 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  filterContent,
+  getAllContent,
   getContentByCategory,
   getDailyChallenge,
   getMixedPracticeSet,
 } from "./contentLibrary";
 
 describe("contentLibrary", () => {
+  it("exposes topic, difficulty, and length on every prompt", () => {
+    const items = getAllContent();
+
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      expect(item.topic).toBeTruthy();
+      expect(["easy", "medium", "hard"]).toContain(item.difficulty);
+      expect(["short", "medium", "long"]).toContain(item.length);
+    }
+  });
+
   it("returns only command items for focused command practice", () => {
     const items = getContentByCategory("command");
 
@@ -33,5 +46,23 @@ describe("contentLibrary", () => {
     const items = getMixedPracticeSet(6);
 
     expect(items.some((item) => /[{}()[\]=><;:_]/.test(item.prompt))).toBe(true);
+  });
+
+  it("filters prompts by topic", () => {
+    const items = filterContent({ topic: "git" });
+
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((item) => item.topic === "git")).toBe(true);
+  });
+
+  it("filters prompts by difficulty and length together", () => {
+    const items = filterContent({ difficulty: "hard", length: "long" });
+
+    expect(items.length).toBeGreaterThan(0);
+    expect(
+      items.every(
+        (item) => item.difficulty === "hard" && item.length === "long",
+      ),
+    ).toBe(true);
   });
 });

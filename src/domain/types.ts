@@ -1,9 +1,36 @@
 export type PracticeCategory = "code" | "command" | "technical";
 export type PracticeMode = "mixed" | "focused" | "daily";
+export type PracticeDifficulty = "easy" | "medium" | "hard";
+export type PracticeLength = "short" | "medium" | "long";
+export type PracticeTopic =
+  | "javascript"
+  | "typescript"
+  | "python"
+  | "sql"
+  | "shell"
+  | "json"
+  | "yaml"
+  | "git"
+  | "npm"
+  | "pip"
+  | "filesystem"
+  | "search"
+  | "docker"
+  | "curl"
+  | "api"
+  | "database"
+  | "logging"
+  | "deploy"
+  | "debugging"
+  | "docs"
+  | "errors";
 
 export interface ContentItem {
   id: string;
   category: PracticeCategory;
+  topic: PracticeTopic;
+  difficulty: PracticeDifficulty;
+  length: PracticeLength;
   label: string;
   prompt: string;
 }
