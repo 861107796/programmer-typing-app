@@ -48,11 +48,41 @@ function getDateKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function shuffleContent(items: ContentItem[]): ContentItem[] {
+  const next = [...items];
+
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+
+  return next;
+}
+
+function getQueueForMode(
+  mode: PracticeMode,
+  focusedCategory: PracticeCategory,
+  dateKey: string,
+): ContentItem[] {
+  if (mode === "focused") {
+    return shuffleContent(getContentByCategory(focusedCategory));
+  }
+
+  if (mode === "daily") {
+    return [getDailyChallenge(dateKey).content];
+  }
+
+  return shuffleContent(getMixedPracticeSet(6));
+}
+
 export function useTypingSession(): UseTypingSessionValue {
   const [mode, setMode] = useState<PracticeMode>("mixed");
   const [focusedCategory, setFocusedCategory] =
     useState<PracticeCategory>("code");
-  const [sessionIndex, setSessionIndex] = useState(0);
+  const [promptQueue, setPromptQueue] = useState<ContentItem[]>(() =>
+    getQueueForMode("mixed", "code", getDateKey()),
+  );
+  const [queueIndex, setQueueIndex] = useState(0);
   const [sessionState, setSessionState] = useState<TypingSessionState>(() =>
     createSessionState(""),
   );
@@ -65,22 +95,15 @@ export function useTypingSession(): UseTypingSessionValue {
   const [dailyChallenge, setDailyChallenge] = useState<StoredDailyChallenge | null>(
     () => repository.getDailyChallenge(getDateKey()),
   );
+  const [latestResult, setLatestResult] = useState<SessionResult | null>(null);
   const savedResultKey = useRef<string | null>(null);
 
-  const content = useMemo(() => {
-    if (mode === "focused") {
-      return getContentByCategory(focusedCategory)[0] ?? null;
-    }
+  const content = useMemo(
+    () => promptQueue[queueIndex] ?? null,
+    [promptQueue, queueIndex],
+  );
 
-    if (mode === "daily") {
-      return getDailyChallenge(getDateKey()).content;
-    }
-
-    const mixed = getMixedPracticeSet(6);
-    return mixed[sessionIndex % mixed.length] ?? null;
-  }, [focusedCategory, mode, sessionIndex]);
-
-  const result = useMemo(() => {
+  const completedResult = useMemo(() => {
     if (!content || !sessionState.startedAt || !sessionState.completedAt) {
       return null;
     }
@@ -98,12 +121,16 @@ export function useTypingSession(): UseTypingSessionValue {
   }, [content, mode, sessionState]);
 
   useEffect(() => {
+    const nextQueue = getQueueForMode(mode, focusedCategory, getDateKey());
+    setPromptQueue(nextQueue);
+    setQueueIndex(0);
     setSessionState(createSessionState(""));
+    setLatestResult(null);
     savedResultKey.current = null;
-  }, [content?.id, mode]);
+  }, [mode, focusedCategory]);
 
   useEffect(() => {
-    if (!result || !content || !sessionState.completedAt) {
+    if (!completedResult || !content || !sessionState.completedAt) {
       return;
     }
 
@@ -112,11 +139,15 @@ export function useTypingSession(): UseTypingSessionValue {
       return;
     }
     savedResultKey.current = resultKey;
+    setLatestResult(completedResult);
 
-    repository.saveSession(result);
+    repository.saveSession(completedResult);
     setSessions(repository.getSessions());
 
-    const nextAchievements = evaluateAchievements(repository.getAchievements(), result);
+    const nextAchievements = evaluateAchievements(
+      repository.getAchievements(),
+      completedResult,
+    );
     repository.saveAchievements(nextAchievements);
     setAchievements(nextAchievements);
 
@@ -125,13 +156,42 @@ export function useTypingSession(): UseTypingSessionValue {
         dateKey: getDateKey(),
         challengeId: content.id,
         completed: true,
-        bestWpm: Math.max(dailyChallenge?.bestWpm ?? 0, result.wpm),
-        bestAccuracy: Math.max(dailyChallenge?.bestAccuracy ?? 0, result.accuracy),
+        bestWpm: Math.max(dailyChallenge?.bestWpm ?? 0, completedResult.wpm),
+        bestAccuracy: Math.max(
+          dailyChallenge?.bestAccuracy ?? 0,
+          completedResult.accuracy,
+        ),
       };
       repository.saveDailyChallenge(nextDailyChallenge);
       setDailyChallenge(nextDailyChallenge);
+      return;
     }
-  }, [content, dailyChallenge, mode, result, sessionState.completedAt]);
+
+    const nextIndex = queueIndex + 1;
+    const nextQueue =
+      nextIndex >= promptQueue.length
+        ? getQueueForMode(mode, focusedCategory, getDateKey())
+        : promptQueue;
+    const normalizedIndex = nextIndex >= promptQueue.length ? 0 : nextIndex;
+    const nextContent = nextQueue[normalizedIndex] ?? null;
+
+    if (nextContent) {
+      if (nextQueue !== promptQueue) {
+        setPromptQueue(nextQueue);
+      }
+      setQueueIndex(normalizedIndex);
+      setSessionState(createSessionState(nextContent.prompt));
+    }
+  }, [
+    completedResult,
+    content,
+    dailyChallenge,
+    focusedCategory,
+    mode,
+    promptQueue,
+    queueIndex,
+    sessionState.completedAt,
+  ]);
 
   function startSession() {
     if (!content) {
@@ -139,6 +199,7 @@ export function useTypingSession(): UseTypingSessionValue {
     }
 
     savedResultKey.current = null;
+    setLatestResult(null);
     setSessionState(createSessionState(content.prompt));
   }
 
@@ -152,8 +213,23 @@ export function useTypingSession(): UseTypingSessionValue {
 
   function nextSession() {
     savedResultKey.current = null;
-    setSessionIndex((value) => value + 1);
+    const nextIndex = queueIndex + 1;
+    const nextQueue =
+      nextIndex >= promptQueue.length
+        ? getQueueForMode(mode, focusedCategory, getDateKey())
+        : promptQueue;
+    const normalizedIndex = nextIndex >= promptQueue.length ? 0 : nextIndex;
+    const nextContent = nextQueue[normalizedIndex] ?? null;
     setDailyChallenge(repository.getDailyChallenge(getDateKey()));
+    setLatestResult(null);
+
+    if (nextContent) {
+      if (nextQueue !== promptQueue) {
+        setPromptQueue(nextQueue);
+      }
+      setQueueIndex(normalizedIndex);
+      setSessionState(createSessionState(nextContent.prompt));
+    }
   }
 
   return {
@@ -163,7 +239,7 @@ export function useTypingSession(): UseTypingSessionValue {
     setFocusedCategory,
     content,
     sessionState,
-    result,
+    result: latestResult,
     sessions,
     achievements,
     dailyChallenge,

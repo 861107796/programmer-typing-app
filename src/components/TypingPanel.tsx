@@ -64,14 +64,26 @@ export function TypingPanel({
       ) : (
         <label className="typing-panel__input">
           Typing Input
-          <input
+          <textarea
             aria-label="Typing input"
-            type="text"
             autoFocus
+            rows={3}
             onKeyDown={(event) => {
               if (event.key === "Backspace") {
                 event.preventDefault();
                 onBackspace();
+                return;
+              }
+
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onInput("\n");
+                return;
+              }
+
+              if (event.key === "Tab") {
+                event.preventDefault();
+                onInput("\t");
               }
             }}
             onChange={(event) => {

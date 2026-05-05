@@ -11,7 +11,7 @@ export function ResultsPanel({ result, onNext }: ResultsPanelProps) {
       <div className="results-panel__header">
         <h2 id="results-heading">Session Results</h2>
         <button type="button" onClick={onNext}>
-          Next Prompt
+          Skip Prompt
         </button>
       </div>
       <dl className="results-grid">
