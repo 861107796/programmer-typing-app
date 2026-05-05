@@ -5,13 +5,56 @@ import App from "../App";
 import { TypingPanel } from "../components/TypingPanel";
 import { createSessionState } from "../engine/typingEngine";
 
+async function renderAuthenticatedApp() {
+  render(<App />);
+  await screen.findByRole("heading", { name: /programmer typing trainer/i });
+}
+
 describe("App", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          user: {
+            id: "u1",
+            email: "dev@example.com",
+            createdAt: "2026-05-05T10:00:00.000Z",
+          },
+        }),
+      }),
+    );
   });
 
-  it("shows the product heading and progress sidebar", () => {
+  it("shows the auth form when no authenticated user is returned", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ user: null }),
+      }),
+    );
+
     render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: /sign in/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the trainer when an authenticated user is returned", async () => {
+    await renderAuthenticatedApp();
+
+    expect(
+      screen.getByRole("heading", { name: /programmer typing trainer/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/dev@example.com/i)).toBeInTheDocument();
+  });
+
+  it("shows the product heading and progress sidebar", async () => {
+    await renderAuthenticatedApp();
 
     expect(
       screen.getByRole("heading", { name: /programmer typing trainer/i }),
@@ -24,8 +67,8 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
-  it("starts a practice session and shows the result after typing the prompt", () => {
-    render(<App />);
+  it("starts a practice session and shows the result after typing the prompt", async () => {
+    await renderAuthenticatedApp();
 
     fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
     const textbox = screen.getByRole("textbox", { name: /typing input/i });
@@ -40,8 +83,8 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not show the empty content message while seeded content exists", () => {
-    render(<App />);
+  it("does not show the empty content message while seeded content exists", async () => {
+    await renderAuthenticatedApp();
 
     expect(
       screen.queryByText(/no practice content available/i),
@@ -49,7 +92,7 @@ describe("App", () => {
   });
 
   it("moves to a different prompt after pressing next in focused mode", async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     fireEvent.click(screen.getByRole("button", { name: /^focused$/i }));
 
@@ -74,8 +117,8 @@ describe("App", () => {
     expect(nextPrompt).not.toBe(initialPrompt);
   });
 
-  it("automatically continues to the next prompt after a completed run", () => {
-    render(<App />);
+  it("automatically continues to the next prompt after a completed run", async () => {
+    await renderAuthenticatedApp();
 
     const initialPrompt = screen.getByTestId("prompt-text").textContent ?? "";
 
@@ -95,7 +138,7 @@ describe("App", () => {
     expect(screen.getByRole("textbox", { name: /typing input/i })).toBeInTheDocument();
   });
 
-  it("uses a shuffled queue for focused mode instead of fixed array order", () => {
+  it("uses a shuffled queue for focused mode instead of fixed array order", async () => {
     vi
       .spyOn(Math, "random")
       .mockReturnValueOnce(0)
@@ -109,7 +152,7 @@ describe("App", () => {
       .mockReturnValueOnce(0)
       .mockReturnValueOnce(0.9999);
 
-    render(<App />);
+    await renderAuthenticatedApp();
     fireEvent.click(screen.getByRole("button", { name: /^focused$/i }));
 
     const firstPrompt = screen.getByTestId("prompt-text").textContent ?? "";

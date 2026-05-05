@@ -1,10 +1,11 @@
+import { AuthGate } from "./components/AuthGate";
 import { ModePicker } from "./components/ModePicker";
 import { ProgressSidebar } from "./components/ProgressSidebar";
 import { ResultsPanel } from "./components/ResultsPanel";
 import { TypingPanel } from "./components/TypingPanel";
 import { useTypingSession } from "./hooks/useTypingSession";
 
-export default function App() {
+function TrainerApp() {
   const session = useTypingSession();
 
   return (
@@ -42,5 +43,13 @@ export default function App() {
         />
       </div>
     </main>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthGate>
+      <TrainerApp />
+    </AuthGate>
   );
 }
