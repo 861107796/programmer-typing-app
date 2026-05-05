@@ -72,4 +72,35 @@ describe("auth backend bootstrap", () => {
     expect(response.status).toBe(401);
     expect(response.body).toEqual({ error: "Invalid credentials" });
   });
+
+  it("returns the authenticated user from /api/auth/me", async () => {
+    const app = await createApp({ databasePath: ":memory:" });
+    const agent = request.agent(app);
+
+    await agent.post("/api/auth/register").send({
+      email: "session@example.com",
+      password: "strong-pass-123",
+    });
+
+    const response = await agent.get("/api/auth/me");
+
+    expect(response.status).toBe(200);
+    expect(response.body.user.email).toBe("session@example.com");
+  });
+
+  it("clears the session on logout", async () => {
+    const app = await createApp({ databasePath: ":memory:" });
+    const agent = request.agent(app);
+
+    await agent.post("/api/auth/register").send({
+      email: "logout@example.com",
+      password: "strong-pass-123",
+    });
+
+    await agent.post("/api/auth/logout");
+    const response = await agent.get("/api/auth/me");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ user: null });
+  });
 });
