@@ -15,9 +15,11 @@ import {
 } from "./middleware/auth";
 import { createAchievementRepository } from "./repositories/achievementRepository";
 import { createDailyChallengeRepository } from "./repositories/dailyChallengeRepository";
+import { createLeaderboardRepository } from "./repositories/leaderboardRepository";
 import { createSessionRepository } from "./repositories/sessionRepository";
 import { createUserRepository } from "./repositories/userRepository";
 import { createAuthRouter } from "./routes/auth";
+import { createLeaderboardRouter } from "./routes/leaderboard";
 import { createProgressRouter } from "./routes/progress";
 import {
   hashPassword,
@@ -26,6 +28,7 @@ import {
   validateCredentials,
   verifyPassword,
 } from "./services/authService";
+import { createLeaderboardService } from "./services/leaderboardService";
 import { createProgressService } from "./services/progressService";
 
 interface CreateAppOptions {
@@ -40,10 +43,14 @@ export async function createApp(options: CreateAppOptions = {}) {
   const sessionRepository = createSessionRepository(db);
   const achievementRepository = createAchievementRepository(db);
   const dailyChallengeRepository = createDailyChallengeRepository(db);
+  const leaderboardRepository = createLeaderboardRepository(db);
   const progressService = createProgressService({
     sessionRepository,
     achievementRepository,
     dailyChallengeRepository,
+  });
+  const leaderboardService = createLeaderboardService({
+    leaderboardRepository,
   });
 
   const app = express();
@@ -137,6 +144,7 @@ export async function createApp(options: CreateAppOptions = {}) {
 
   app.use("/api/auth", authRouter);
   app.use("/api", createProgressRouter({ progressService }));
+  app.use("/api/leaderboard", createLeaderboardRouter({ leaderboardService }));
 
   app.use((_error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     response.status(500).json({ error: "Internal server error" });

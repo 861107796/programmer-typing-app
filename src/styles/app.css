@@ -98,6 +98,13 @@ body {
   font-size: 0.75rem;
 }
 
+.app-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
 button {
   border: 0;
   border-radius: 999px;
@@ -107,6 +114,12 @@ button {
   cursor: pointer;
   font: inherit;
   font-weight: 700;
+}
+
+.app-switch button.is-active,
+.leaderboard-tabs button.is-active {
+  background: var(--text);
+  color: #04111d;
 }
 
 select,
@@ -131,11 +144,73 @@ textarea {
 .mode-picker,
 .typing-panel,
 .results-panel,
-.sidebar-card {
+.sidebar-card,
+.leaderboard-card {
   margin-top: 24px;
   padding: 20px;
   border-radius: 18px;
   background: rgba(22, 38, 68, 0.65);
+}
+
+.leaderboard-card {
+  margin-top: 0;
+}
+
+.leaderboard-header,
+.leaderboard-tabs {
+  display: flex;
+  gap: 12px;
+}
+
+.leaderboard-header {
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.leaderboard-tabs {
+  flex-wrap: wrap;
+}
+
+.leaderboard-state {
+  color: var(--muted);
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.leaderboard-table thead {
+  background: rgba(5, 10, 19, 0.85);
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 12px 10px;
+  text-align: left;
+}
+
+.leaderboard-table tbody tr:nth-child(odd) {
+  background: rgba(5, 10, 19, 0.28);
+}
+
+.leaderboard-summary {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: rgba(5, 10, 19, 0.55);
+}
+
+.leaderboard-summary h3,
+.leaderboard-summary p {
+  margin: 0;
+}
+
+.leaderboard-summary p {
+  margin-top: 10px;
 }
 
 .mode-picker__buttons {
@@ -227,5 +302,9 @@ textarea {
   .results-panel__header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .leaderboard-header {
+    flex-direction: column;
   }
 }

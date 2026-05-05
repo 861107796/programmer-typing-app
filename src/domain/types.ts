@@ -77,3 +77,28 @@ export interface ProgressSnapshotResponse {
   achievements: PersistedAchievement[];
   dailyChallenge: StoredDailyChallenge | null;
 }
+
+export interface LeaderboardEntry {
+  rank: number;
+  displayName: string;
+  wpm: number;
+  accuracy: number;
+  recordedAt: string;
+}
+
+export interface LeaderboardResponse {
+  entries: LeaderboardEntry[];
+}
+
+export interface PersonalLeaderboardSummary {
+  rank: number;
+  displayName: string;
+  wpm: number;
+  accuracy: number;
+  recordedAt: string;
+}
+
+export interface PersonalLeaderboardResponse {
+  daily: PersonalLeaderboardSummary | null;
+  global: PersonalLeaderboardSummary | null;
+}

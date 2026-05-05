@@ -5,6 +5,8 @@ import App from "../App";
 import { TypingPanel } from "../components/TypingPanel";
 import { getAllContent } from "../content/contentLibrary";
 import type {
+  LeaderboardResponse,
+  PersonalLeaderboardResponse,
   ProgressSnapshotResponse,
   SessionResult,
 } from "../domain/types";
@@ -35,12 +37,24 @@ function createFetchMock(options?: {
   progress?: ProgressSnapshotResponse;
   saveSessionResponse?: ProgressSnapshotResponse;
   saveSessionStatus?: number;
+  dailyLeaderboard?: LeaderboardResponse;
+  dailyLeaderboardStatus?: number;
+  globalLeaderboard?: LeaderboardResponse;
+  globalLeaderboardStatus?: number;
+  myLeaderboard?: PersonalLeaderboardResponse;
+  myLeaderboardStatus?: number;
 }) {
   const currentUser =
     options && "currentUser" in options ? options.currentUser : defaultUser;
   const progress = options?.progress ?? emptyProgress;
   const saveSessionResponse = options?.saveSessionResponse ?? progress;
   const saveSessionStatus = options?.saveSessionStatus ?? 200;
+  const dailyLeaderboard = options?.dailyLeaderboard ?? { entries: [] };
+  const dailyLeaderboardStatus = options?.dailyLeaderboardStatus ?? 200;
+  const globalLeaderboard = options?.globalLeaderboard ?? { entries: [] };
+  const globalLeaderboardStatus = options?.globalLeaderboardStatus ?? 200;
+  const myLeaderboard = options?.myLeaderboard ?? { daily: null, global: null };
+  const myLeaderboardStatus = options?.myLeaderboardStatus ?? 200;
 
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -58,6 +72,30 @@ function createFetchMock(options?: {
         saveSessionResponse,
         saveSessionStatus >= 200 && saveSessionStatus < 300,
         saveSessionStatus,
+      );
+    }
+
+    if (url === "/api/leaderboard/daily") {
+      return jsonResponse(
+        dailyLeaderboard,
+        dailyLeaderboardStatus >= 200 && dailyLeaderboardStatus < 300,
+        dailyLeaderboardStatus,
+      );
+    }
+
+    if (url === "/api/leaderboard/global") {
+      return jsonResponse(
+        globalLeaderboard,
+        globalLeaderboardStatus >= 200 && globalLeaderboardStatus < 300,
+        globalLeaderboardStatus,
+      );
+    }
+
+    if (url === "/api/leaderboard/me") {
+      return jsonResponse(
+        myLeaderboard,
+        myLeaderboardStatus >= 200 && myLeaderboardStatus < 300,
+        myLeaderboardStatus,
       );
     }
 
@@ -425,5 +463,111 @@ describe("App", () => {
       await screen.findByRole("heading", { name: /sign in/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/session expired\. please sign in again\./i)).toBeInTheDocument();
+  });
+
+  it("renders the daily leaderboard after switching away from the trainer", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        dailyLeaderboard: {
+          entries: [
+            {
+              rank: 1,
+              displayName: "gamma",
+              wpm: 92,
+              accuracy: 100,
+              recordedAt: "2026-05-05T10:12:00.000Z",
+            },
+          ],
+        },
+        globalLeaderboard: { entries: [] },
+        myLeaderboard: {
+          daily: {
+            rank: 5,
+            displayName: "dev",
+            wpm: 74,
+            accuracy: 97,
+            recordedAt: "2026-05-05T10:15:00.000Z",
+          },
+          global: null,
+        },
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    fireEvent.click(screen.getByRole("button", { name: /^leaderboard$/i }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /daily challenge leaderboard/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^gamma$/i)).toBeInTheDocument();
+    expect(screen.getByText(/my rank/i)).toBeInTheDocument();
+  });
+
+  it("switches to the global leaderboard tab and renders empty state text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        dailyLeaderboard: { entries: [] },
+        globalLeaderboard: {
+          entries: [
+            {
+              rank: 1,
+              displayName: "beta",
+              wpm: 101,
+              accuracy: 100,
+              recordedAt: "2026-05-05T10:20:00.000Z",
+            },
+          ],
+        },
+        myLeaderboard: {
+          daily: null,
+          global: {
+            rank: 12,
+            displayName: "dev",
+            wpm: 88,
+            accuracy: 99,
+            recordedAt: "2026-05-05T10:21:00.000Z",
+          },
+        },
+      }),
+    );
+
+    render(<App />);
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    fireEvent.click(screen.getByRole("button", { name: /^leaderboard$/i }));
+
+    expect(
+      await screen.findByText(/no entries yet\. be the first to set a score\./i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^global$/i }));
+
+    expect(await screen.findByText(/^beta$/i)).toBeInTheDocument();
+    expect(screen.getByText(/12\. dev · 88 WPM · 99%/i)).toBeInTheDocument();
+  });
+
+  it("returns to sign in when a leaderboard request comes back unauthorized", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        dailyLeaderboardStatus: 401,
+      }),
+    );
+
+    render(<App />);
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    fireEvent.click(screen.getByRole("button", { name: /^leaderboard$/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: /sign in/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/session expired\. please sign in again\./i),
+    ).toBeInTheDocument();
   });
 });
