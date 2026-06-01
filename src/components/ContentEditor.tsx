@@ -28,6 +28,45 @@ const defaultValues: ContentEditorValue = {
   isActive: true,
 };
 
+const topicOptions: PracticeTopic[] = [
+  "javascript",
+  "typescript",
+  "python",
+  "java",
+  "c",
+  "cpp",
+  "go",
+  "rust",
+  "sql",
+  "shell",
+  "json",
+  "yaml",
+  "git",
+  "npm",
+  "pip",
+  "filesystem",
+  "search",
+  "docker",
+  "curl",
+  "api",
+  "database",
+  "logging",
+  "deploy",
+  "debugging",
+  "docs",
+  "errors",
+  "algorithm",
+  "llm",
+  "ml",
+  "react",
+  "concurrency",
+  "testing",
+  "devops",
+  "security",
+  "database_advanced",
+  "compiler",
+];
+
 export function ContentEditor({
   initialValue,
   onCancel,
@@ -74,6 +113,25 @@ export function ContentEditor({
             setForm((current) => ({ ...current, label: event.target.value }))
           }
         />
+      </label>
+      <label>
+        Topic
+        <select
+          aria-label="Topic"
+          value={form.topic}
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              topic: event.target.value as PracticeTopic,
+            }))
+          }
+        >
+          {topicOptions.map((topic) => (
+            <option key={topic} value={topic}>
+              {topic}
+            </option>
+          ))}
+        </select>
       </label>
       <label>
         Prompt

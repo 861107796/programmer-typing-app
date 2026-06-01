@@ -33,6 +33,31 @@ export function fetchAdminContent(query = "") {
   return readJson<AdminContentListResponse>(`/api/admin/content${query}`);
 }
 
+export interface AdminContentFilterQuery {
+  category?: string;
+  topic?: string;
+  difficulty?: string;
+}
+
+export function buildAdminContentQuery(filters: AdminContentFilterQuery) {
+  const params = new URLSearchParams();
+
+  if (filters.category) {
+    params.set("category", filters.category);
+  }
+
+  if (filters.topic) {
+    params.set("topic", filters.topic);
+  }
+
+  if (filters.difficulty) {
+    params.set("difficulty", filters.difficulty);
+  }
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export function createAdminContent(input: AdminContentInput) {
   return readJson<AdminContentItem>("/api/admin/content", {
     method: "POST",

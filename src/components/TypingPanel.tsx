@@ -12,14 +12,14 @@ interface TypingPanelProps {
 
 function renderPrompt(content: ContentItem, sessionState: TypingSessionState) {
   return [...content.prompt].map((char, index) => {
-    let className = "";
+    let className = "prompt-char prompt-char--pending";
 
     if (index < sessionState.cursor) {
-      className = "prompt-char--correct";
+      className = "prompt-char prompt-char--correct";
     } else if (index === sessionState.cursor && sessionState.invalid) {
-      className = "prompt-char--error";
+      className = "prompt-char prompt-char--error";
     } else if (index === sessionState.cursor) {
-      className = "prompt-char--cursor";
+      className = "prompt-char prompt-char--cursor";
     }
 
     return (
@@ -54,9 +54,19 @@ export function TypingPanel({
         <p className="typing-panel__eyebrow">{content.category}</p>
         <h2>{content.label}</h2>
       </div>
-      <pre className="typing-panel__prompt" data-testid="prompt-text">
-        {renderPrompt(content, sessionState)}
-      </pre>
+      <div className="typing-panel__arena" data-testid="prompt-arena">
+        <div className="typing-panel__arena-hud">
+          <span className="typing-panel__arena-label">Target Prompt</span>
+          <span className="typing-panel__arena-status">
+            {result ? "Cleared" : isRunning ? "Live Run" : "Armed"}
+          </span>
+        </div>
+        <div className="typing-panel__surface" data-testid="prompt-surface">
+          <pre className="typing-panel__prompt" data-testid="prompt-text">
+            {renderPrompt(content, sessionState)}
+          </pre>
+        </div>
+      </div>
       {!isRunning ? (
         <button type="button" onClick={onStart}>
           Start Practice
@@ -99,10 +109,25 @@ export function TypingPanel({
           />
         </label>
       )}
-      <div className="typing-panel__metrics">
-        <p>Correct: {sessionState.correctChars}</p>
-        <p>Errors: {sessionState.errorCount}</p>
-        <p>Status: {result ? "Complete" : isRunning ? "Typing" : "Ready"}</p>
+      <div className="typing-panel__metrics" data-testid="typing-metrics">
+        <div className="typing-panel__metric">
+          <span className="typing-panel__metric-label">Correct</span>
+          <strong className="typing-panel__metric-value typing-panel__metric-value--success">
+            {sessionState.correctChars}
+          </strong>
+        </div>
+        <div className="typing-panel__metric">
+          <span className="typing-panel__metric-label">Errors</span>
+          <strong className="typing-panel__metric-value typing-panel__metric-value--danger">
+            {sessionState.errorCount}
+          </strong>
+        </div>
+        <div className="typing-panel__metric">
+          <span className="typing-panel__metric-label">Status</span>
+          <strong className="typing-panel__metric-value">
+            {result ? "Complete" : isRunning ? "Typing" : "Ready"}
+          </strong>
+        </div>
       </div>
     </section>
   );

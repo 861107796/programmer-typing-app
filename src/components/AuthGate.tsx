@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import * as authApi from "../auth/authApi";
 import { useAuth } from "../auth/useAuth";
@@ -16,10 +16,10 @@ export function AuthGate({
   const { user, setUser, loading, error, setError } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
 
-  const handleExpiredSession = () => {
+  const handleExpiredSession = useCallback(() => {
     setError("Session expired. Please sign in again.");
     setUser(null);
-  };
+  }, [setError, setUser]);
 
   if (loading) {
     return (

@@ -35,6 +35,7 @@ import {
 import { createContentService } from "./services/contentService";
 import { createLeaderboardService } from "./services/leaderboardService";
 import { createProgressService } from "./services/progressService";
+import { seedLegacyContentIfEmpty } from "./seed/seedLegacyContent";
 
 interface CreateAppOptions {
   databasePath?: string;
@@ -51,18 +52,31 @@ export async function createApp(options: CreateAppOptions = {}) {
   const contentRepository = createContentRepository(db);
   const challengeAssignmentRepository = createChallengeAssignmentRepository(db);
   const leaderboardRepository = createLeaderboardRepository(db);
-  const progressService = createProgressService({
-    sessionRepository,
-    achievementRepository,
-    dailyChallengeRepository,
-  });
+  const seedResult = await seedLegacyContentIfEmpty(contentRepository);
   const contentService = createContentService({
     contentRepository,
     challengeAssignmentRepository,
   });
+  const progressService = createProgressService({
+    sessionRepository,
+    achievementRepository,
+    dailyChallengeRepository,
+    resolveDailyChallenge: (dateKey) =>
+      contentService.getDailyChallengeContent(dateKey),
+  });
   const leaderboardService = createLeaderboardService({
     leaderboardRepository,
   });
+
+  if (seedResult.seeded) {
+    console.log(
+      `[content-seed] inserted ${seedResult.inserted} legacy prompts into content_items`,
+    );
+  } else {
+    console.log(
+      "[content-seed] skipped legacy seed because content_items is not empty",
+    );
+  }
 
   const app = express();
 

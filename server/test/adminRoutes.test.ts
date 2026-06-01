@@ -13,6 +13,23 @@ async function register(agent: ReturnType<typeof request.agent>, email: string) 
 }
 
 describe("admin content routes", () => {
+  it("seeds the content table from the legacy prompt library when the database is empty", async () => {
+    const app = await createApp({ databasePath: ":memory:" });
+    const agent = request.agent(app);
+
+    await register(agent, "seed@example.com");
+
+    const response = await agent.get("/api/admin/content");
+
+    expect(response.status).toBe(200);
+    expect(response.body.items.length).toBeGreaterThan(100);
+    expect(
+      response.body.items.some(
+        (item: { label: string }) => item.label === "Typed formatter",
+      ),
+    ).toBe(true);
+  });
+
   it("creates a content item and returns it in the filtered list", async () => {
     const app = await createApp({ databasePath: ":memory:" });
     const agent = request.agent(app);
@@ -42,12 +59,48 @@ describe("admin content routes", () => {
     );
 
     expect(listResponse.status).toBe(200);
-    expect(listResponse.body.items).toEqual([
+    expect(listResponse.body.items).toContainEqual(
       expect.objectContaining({
         label: "Typed formatter",
         topic: "typescript",
       }),
-    ]);
+    );
+  });
+
+  it("accepts specialized code topics in admin content routes", async () => {
+    const app = await createApp({ databasePath: ":memory:" });
+    const agent = request.agent(app);
+
+    await register(agent, "specialized@example.com");
+
+    const createResponse = await agent.post("/api/admin/content").send({
+      category: "code",
+      topic: "algorithm",
+      difficulty: "hard",
+      length: "medium",
+      label: "Sliding window maximum",
+      prompt:
+        "while deque and nums[deque[-1]] <= value:\n    deque.pop()",
+      isActive: true,
+    });
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body).toMatchObject({
+      topic: "algorithm",
+      label: "Sliding window maximum",
+    });
+
+    const listResponse = await agent.get(
+      "/api/admin/content?category=code&topic=algorithm&difficulty=hard",
+    );
+
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.items).toContainEqual(
+      expect.objectContaining({
+        topic: "algorithm",
+        label: "Sliding window maximum",
+      }),
+    );
   });
 
   it("rejects invalid prompt input", async () => {

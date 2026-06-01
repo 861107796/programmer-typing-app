@@ -1,4 +1,3 @@
-import { getDailyChallenge } from "../../src/content/contentLibrary";
 import {
   evaluateAchievements,
   type AchievementState,
@@ -37,6 +36,9 @@ interface ProgressServiceDependencies {
       updatedAt: string;
     }) => Promise<void>;
   };
+  resolveDailyChallenge: (
+    dateKey: string,
+  ) => Promise<{ content: { id: string } }>;
 }
 
 function toSessionResponse(record: SessionRecord) {
@@ -129,7 +131,7 @@ export function createProgressService(dependencies: ProgressServiceDependencies)
       );
 
       if (input.mode === "daily") {
-        const dailyChallenge = getDailyChallenge(dateKey);
+        const dailyChallenge = await dependencies.resolveDailyChallenge(dateKey);
 
         await dependencies.dailyChallengeRepository.upsert({
           userId,

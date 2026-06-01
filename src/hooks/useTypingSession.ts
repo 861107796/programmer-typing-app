@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchBackendDailyChallenge } from "../admin/adminApi";
 import {
-  getContentByCategory,
-  getDailyChallenge,
-  getMixedPracticeSet,
-} from "../content/contentLibrary";
+  fetchBackendDailyChallenge,
+  fetchSessionContent,
+} from "../content/contentApi";
 import type {
-  BackendDailyChallengeResponse,
   ContentItem,
   PersistedSession,
   PracticeCategory,
@@ -59,45 +56,13 @@ function getDateKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function shuffleContent(items: ContentItem[]): ContentItem[] {
-  const next = [...items];
-
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-  }
-
-  return next;
-}
-
-function getQueueForMode(
-  mode: PracticeMode,
-  focusedCategory: PracticeCategory,
-  dateKey: string,
-  backendDailyChallenge: BackendDailyChallengeResponse | null,
-): ContentItem[] {
-  if (mode === "focused") {
-    return shuffleContent(getContentByCategory(focusedCategory));
-  }
-
-  if (mode === "daily") {
-    return [backendDailyChallenge?.content ?? getDailyChallenge(dateKey).content];
-  }
-
-  return shuffleContent(getMixedPracticeSet(6));
-}
-
 export function useTypingSession({
   onAuthExpired,
 }: UseTypingSessionOptions): UseTypingSessionValue {
   const [mode, setMode] = useState<PracticeMode>("mixed");
   const [focusedCategory, setFocusedCategory] =
     useState<PracticeCategory>("code");
-  const [backendDailyChallenge, setBackendDailyChallenge] =
-    useState<BackendDailyChallengeResponse | null>(null);
-  const [promptQueue, setPromptQueue] = useState<ContentItem[]>(() =>
-    getQueueForMode("mixed", "code", getDateKey(), null),
-  );
+  const [promptQueue, setPromptQueue] = useState<ContentItem[]>([]);
   const [queueIndex, setQueueIndex] = useState(0);
   const [sessionState, setSessionState] = useState<TypingSessionState>(() =>
     createSessionState(""),
@@ -168,11 +133,69 @@ export function useTypingSession({
   }, [onAuthExpired]);
 
   useEffect(() => {
+    if (mode === "daily") {
+      return;
+    }
+
+    let cancelled = false;
+
+    setPromptQueue([]);
+    setQueueIndex(0);
+    setSessionState(createSessionState(""));
+    setLatestResult(null);
+    savedResultKey.current = null;
+
+    fetchSessionContent(
+      mode === "focused" ? "focused" : "mixed",
+      mode === "focused" ? focusedCategory : undefined,
+    )
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPromptQueue(payload.items);
+        setQueueIndex(0);
+        setSessionState(createSessionState(""));
+        setLatestResult(null);
+        savedResultKey.current = null;
+        setProgressError(null);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (error instanceof Error && error.message === "AUTH_EXPIRED") {
+          onAuthExpired();
+          return;
+        }
+
+        setPromptQueue([]);
+        setQueueIndex(0);
+        setSessionState(createSessionState(""));
+        setProgressError(
+          error instanceof Error ? error.message : "Content queue fetch failed",
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focusedCategory, mode, onAuthExpired]);
+
+  useEffect(() => {
     if (mode !== "daily") {
       return;
     }
 
     let cancelled = false;
+
+    setPromptQueue([]);
+    setQueueIndex(0);
+    setSessionState(createSessionState(""));
+    setLatestResult(null);
+    savedResultKey.current = null;
 
     fetchBackendDailyChallenge()
       .then((payload) => {
@@ -180,7 +203,9 @@ export function useTypingSession({
           return;
         }
 
-        setBackendDailyChallenge(payload);
+        setPromptQueue([payload.content]);
+        setQueueIndex(0);
+        setSessionState(createSessionState(""));
         setDailyChallenge((currentChallenge) => ({
           dateKey: payload.dateKey,
           challengeId: payload.content.id,
@@ -200,6 +225,9 @@ export function useTypingSession({
           return;
         }
 
+        setPromptQueue([]);
+        setQueueIndex(0);
+        setSessionState(createSessionState(""));
         setProgressError(
           error instanceof Error
             ? error.message
@@ -211,20 +239,6 @@ export function useTypingSession({
       cancelled = true;
     };
   }, [mode, onAuthExpired]);
-
-  useEffect(() => {
-    const nextQueue = getQueueForMode(
-      mode,
-      focusedCategory,
-      getDateKey(),
-      backendDailyChallenge,
-    );
-    setPromptQueue(nextQueue);
-    setQueueIndex(0);
-    setSessionState(createSessionState(""));
-    setLatestResult(null);
-    savedResultKey.current = null;
-  }, [backendDailyChallenge, focusedCategory, mode]);
 
   useEffect(() => {
     if (!completedResult || !content || !sessionState.completedAt) {
@@ -257,29 +271,71 @@ export function useTypingSession({
       });
 
     const nextIndex = queueIndex + 1;
-    const nextQueue =
-      nextIndex >= promptQueue.length
-        ? getQueueForMode(
-            mode,
-            focusedCategory,
-            getDateKey(),
-            backendDailyChallenge,
-          )
-        : promptQueue;
-    const normalizedIndex = nextIndex >= promptQueue.length ? 0 : nextIndex;
-    const nextContent = nextQueue[normalizedIndex] ?? null;
 
-    if (nextContent) {
-      if (nextQueue !== promptQueue) {
-        setPromptQueue(nextQueue);
+    if (nextIndex < promptQueue.length) {
+      const nextContent = promptQueue[nextIndex] ?? null;
+      if (nextContent) {
+        setQueueIndex(nextIndex);
+        setSessionState(createSessionState(nextContent.prompt));
       }
-      setQueueIndex(normalizedIndex);
-      setSessionState(createSessionState(nextContent.prompt));
+      return;
     }
+
+    if (mode === "daily") {
+      void fetchBackendDailyChallenge()
+        .then((payload) => {
+          setPromptQueue([payload.content]);
+          setQueueIndex(0);
+          setSessionState(createSessionState(payload.content.prompt));
+        })
+        .catch((error) => {
+          if (error instanceof Error && error.message === "AUTH_EXPIRED") {
+            onAuthExpired();
+            return;
+          }
+
+          setPromptQueue([]);
+          setQueueIndex(0);
+          setSessionState(createSessionState(""));
+          setProgressError(
+            error instanceof Error
+              ? error.message
+              : "Daily challenge fetch failed",
+          );
+        });
+      return;
+    }
+
+    void fetchSessionContent(
+      mode === "focused" ? "focused" : "mixed",
+      mode === "focused" ? focusedCategory : undefined,
+    )
+      .then((payload) => {
+        setPromptQueue(payload.items);
+        setQueueIndex(0);
+        if (payload.items[0]) {
+          setSessionState(createSessionState(payload.items[0].prompt));
+        } else {
+          setSessionState(createSessionState(""));
+        }
+        setProgressError(null);
+      })
+      .catch((error) => {
+        if (error instanceof Error && error.message === "AUTH_EXPIRED") {
+          onAuthExpired();
+          return;
+        }
+
+        setPromptQueue([]);
+        setQueueIndex(0);
+        setSessionState(createSessionState(""));
+        setProgressError(
+          error instanceof Error ? error.message : "Content queue fetch failed",
+        );
+      });
   }, [
     completedResult,
     content,
-    backendDailyChallenge,
     focusedCategory,
     mode,
     onAuthExpired,
@@ -308,27 +364,71 @@ export function useTypingSession({
 
   function nextSession() {
     savedResultKey.current = null;
-    const nextIndex = queueIndex + 1;
-    const nextQueue =
-      nextIndex >= promptQueue.length
-        ? getQueueForMode(
-            mode,
-            focusedCategory,
-            getDateKey(),
-            backendDailyChallenge,
-          )
-        : promptQueue;
-    const normalizedIndex = nextIndex >= promptQueue.length ? 0 : nextIndex;
-    const nextContent = nextQueue[normalizedIndex] ?? null;
     setLatestResult(null);
+    const nextIndex = queueIndex + 1;
 
-    if (nextContent) {
-      if (nextQueue !== promptQueue) {
-        setPromptQueue(nextQueue);
+    if (nextIndex < promptQueue.length) {
+      const nextContent = promptQueue[nextIndex] ?? null;
+      if (nextContent) {
+        setQueueIndex(nextIndex);
+        setSessionState(createSessionState(nextContent.prompt));
       }
-      setQueueIndex(normalizedIndex);
-      setSessionState(createSessionState(nextContent.prompt));
+      return;
     }
+
+    if (mode === "daily") {
+      void fetchBackendDailyChallenge()
+        .then((payload) => {
+          setPromptQueue([payload.content]);
+          setQueueIndex(0);
+          setSessionState(createSessionState(payload.content.prompt));
+          setProgressError(null);
+        })
+        .catch((error) => {
+          if (error instanceof Error && error.message === "AUTH_EXPIRED") {
+            onAuthExpired();
+            return;
+          }
+
+          setPromptQueue([]);
+          setQueueIndex(0);
+          setSessionState(createSessionState(""));
+          setProgressError(
+            error instanceof Error
+              ? error.message
+              : "Daily challenge fetch failed",
+          );
+        });
+      return;
+    }
+
+    void fetchSessionContent(
+      mode === "focused" ? "focused" : "mixed",
+      mode === "focused" ? focusedCategory : undefined,
+    )
+      .then((payload) => {
+        setPromptQueue(payload.items);
+        setQueueIndex(0);
+        if (payload.items[0]) {
+          setSessionState(createSessionState(payload.items[0].prompt));
+        } else {
+          setSessionState(createSessionState(""));
+        }
+        setProgressError(null);
+      })
+      .catch((error) => {
+        if (error instanceof Error && error.message === "AUTH_EXPIRED") {
+          onAuthExpired();
+          return;
+        }
+
+        setPromptQueue([]);
+        setQueueIndex(0);
+        setSessionState(createSessionState(""));
+        setProgressError(
+          error instanceof Error ? error.message : "Content queue fetch failed",
+        );
+      });
   }
 
   return {

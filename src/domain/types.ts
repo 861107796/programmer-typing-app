@@ -6,6 +6,11 @@ export type PracticeTopic =
   | "javascript"
   | "typescript"
   | "python"
+  | "java"
+  | "c"
+  | "cpp"
+  | "go"
+  | "rust"
   | "sql"
   | "shell"
   | "json"
@@ -23,7 +28,17 @@ export type PracticeTopic =
   | "deploy"
   | "debugging"
   | "docs"
-  | "errors";
+  | "errors"
+  | "algorithm"
+  | "llm"
+  | "ml"
+  | "react"
+  | "concurrency"
+  | "testing"
+  | "devops"
+  | "security"
+  | "database_advanced"
+  | "compiler";
 
 export interface ContentItem {
   id: string;

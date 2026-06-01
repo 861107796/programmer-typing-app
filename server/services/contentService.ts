@@ -21,6 +21,11 @@ const topics = new Set<PracticeTopic>([
   "javascript",
   "typescript",
   "python",
+  "java",
+  "c",
+  "cpp",
+  "go",
+  "rust",
   "sql",
   "shell",
   "json",
@@ -39,6 +44,16 @@ const topics = new Set<PracticeTopic>([
   "debugging",
   "docs",
   "errors",
+  "algorithm",
+  "llm",
+  "ml",
+  "react",
+  "concurrency",
+  "testing",
+  "devops",
+  "security",
+  "database_advanced",
+  "compiler",
 ]);
 
 function toDateKey(value?: string) {
@@ -90,6 +105,17 @@ function toAssignmentResponse(record: ChallengeAssignmentRecord) {
   };
 }
 
+function shuffleItems<T>(items: T[]): T[] {
+  const next = [...items];
+
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+
+  return next;
+}
+
 interface ContentServiceDependencies {
   contentRepository: {
     list: (filters?: ContentFilters) => Promise<ContentRecord[]>;
@@ -100,6 +126,8 @@ interface ContentServiceDependencies {
     ) => Promise<ContentRecord | null>;
     findById: (id: string) => Promise<ContentRecord | null>;
     delete: (id: string) => Promise<void>;
+    listActive: () => Promise<ContentRecord[]>;
+    listActiveByCategory: (category: string) => Promise<ContentRecord[]>;
     listActiveByPreference: () => Promise<ContentRecord[]>;
   };
   challengeAssignmentRepository: {
@@ -212,6 +240,23 @@ export function createContentService(dependencies: ContentServiceDependencies) {
       }
 
       return toAssignmentResponse(assignment);
+    },
+
+    async getSessionContent(mode: "mixed" | "focused", category?: string) {
+      if (mode === "focused") {
+        if (!category) {
+          throw new Error("Focused mode requires category");
+        }
+
+        const items = await dependencies.contentRepository.listActiveByCategory(
+          category,
+        );
+
+        return { items: shuffleItems(items).map(toContentResponse) };
+      }
+
+      const items = await dependencies.contentRepository.listActive();
+      return { items: shuffleItems(items).map(toContentResponse).slice(0, 6) };
     },
 
     async getDailyChallengeContent(dateKeyInput?: string) {

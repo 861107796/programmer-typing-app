@@ -35,6 +35,15 @@ export interface CreateContentInput {
 
 export function createContentRepository(db: Database) {
   return {
+    async count() {
+      const row =
+        (await db.get<{ count: number }>(
+          `select count(*) as count from content_items`,
+        )) ?? { count: 0 };
+
+      return row.count;
+    },
+
     async list(filters: ContentFilters = {}) {
       const clauses: string[] = [];
       const params: Array<string | number> = [];
@@ -140,6 +149,23 @@ export function createContentRepository(db: Database) {
 
     async delete(id: string) {
       await db.run(`delete from content_items where id = ?`, id);
+    },
+
+    async listActive() {
+      return db.all<ContentRecord[]>(
+        `select * from content_items
+         where is_active = 1
+         order by updated_at desc, label asc`,
+      );
+    },
+
+    async listActiveByCategory(category: string) {
+      return db.all<ContentRecord[]>(
+        `select * from content_items
+         where is_active = 1 and category = ?
+         order by updated_at desc, label asc`,
+        category,
+      );
     },
 
     async listActiveByPreference() {

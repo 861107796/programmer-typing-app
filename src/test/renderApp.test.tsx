@@ -53,6 +53,8 @@ function createFetchMock(options?: {
   adminDailyChallengeList?: { assignments: AdminChallengeAssignment[] };
   adminDailyChallengeAssignResponse?: AdminChallengeAssignment;
   adminDailyChallengeGenerateResponse?: AdminChallengeAssignment;
+  mixedSessionItems?: { items: BackendDailyChallengeResponse["content"][] };
+  focusedSessionItems?: { items: BackendDailyChallengeResponse["content"][] };
   contentDailyChallenge?: BackendDailyChallengeResponse;
 }) {
   const currentUser =
@@ -77,6 +79,13 @@ function createFetchMock(options?: {
     options?.adminDailyChallengeAssignResponse;
   const adminDailyChallengeGenerateResponse =
     options?.adminDailyChallengeGenerateResponse;
+  const defaultAdminItems = options?.adminContentList ?? { items: [] };
+  const mixedSessionItems = options?.mixedSessionItems ?? {
+    items: getAllContent().slice(0, 6),
+  };
+  const focusedSessionItems = options?.focusedSessionItems ?? {
+    items: getAllContent().filter((item) => item.category === "technical").slice(0, 6),
+  };
   const contentDailyChallenge =
     options?.contentDailyChallenge ?? {
       dateKey: "2026-05-05",
@@ -107,7 +116,23 @@ function createFetchMock(options?: {
       url.startsWith("/api/admin/content") &&
       (init?.method ?? "GET") === "GET"
     ) {
-      return jsonResponse(adminContentList);
+      const parsed = new URL(url, "http://localhost");
+      const category = parsed.searchParams.get("category");
+      const topic = parsed.searchParams.get("topic");
+      const difficulty = parsed.searchParams.get("difficulty");
+      const filteredItems = defaultAdminItems.items.filter((item) => {
+        if (category && item.category !== category) {
+          return false;
+        }
+        if (topic && item.topic !== topic) {
+          return false;
+        }
+        if (difficulty && item.difficulty !== difficulty) {
+          return false;
+        }
+        return true;
+      });
+      return jsonResponse({ items: filteredItems });
     }
 
     if (url === "/api/admin/content" && init?.method === "POST") {
@@ -144,8 +169,16 @@ function createFetchMock(options?: {
       return jsonResponse(adminDailyChallengeGenerateResponse);
     }
 
-    if (url === "/api/content/daily-challenge") {
+    if (url.includes("/api/content/daily-challenge")) {
       return jsonResponse(contentDailyChallenge);
+    }
+
+    if (url.includes("/api/content/session?mode=mixed")) {
+      return jsonResponse(mixedSessionItems);
+    }
+
+    if (url.includes("/api/content/session?mode=focused")) {
+      return jsonResponse(focusedSessionItems);
     }
 
     if (url === "/api/leaderboard/daily") {
@@ -190,6 +223,10 @@ async function renderAuthenticatedApp() {
   await screen.findByText(/sessions saved to cloud/i);
 }
 
+async function waitForPromptText() {
+  return screen.findByTestId("prompt-text");
+}
+
 function typePrompt(textbox: HTMLElement, prompt: string) {
   for (const char of prompt) {
     if (char === "\n") {
@@ -212,7 +249,7 @@ async function completeFocusedTechnicalPrompt() {
     target: { value: "technical" },
   });
 
-  const prompt = screen.getByTestId("prompt-text").textContent ?? "";
+  const prompt = (await waitForPromptText()).textContent ?? "";
 
   fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
   const textbox = screen.getByRole("textbox", { name: /typing input/i });
@@ -272,6 +309,7 @@ describe("App", () => {
 
   it("does not show the empty content message while seeded content exists", async () => {
     await renderAuthenticatedApp();
+    await waitForPromptText();
 
     expect(
       screen.queryByText(/no practice content available/i),
@@ -283,7 +321,7 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^focused$/i }));
 
-    const initialPrompt = screen.getByTestId("prompt-text").textContent ?? "";
+    const initialPrompt = (await waitForPromptText()).textContent ?? "";
 
     fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
     const textbox = screen.getByRole("textbox", { name: /typing input/i });
@@ -297,6 +335,9 @@ describe("App", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /skip prompt/i }));
 
+    await waitFor(() =>
+      expect(screen.getByTestId("prompt-text").textContent ?? "").not.toBe(initialPrompt),
+    );
     const nextPrompt = screen.getByTestId("prompt-text").textContent ?? "";
 
     expect(nextPrompt).not.toBe(initialPrompt);
@@ -306,11 +347,11 @@ describe("App", () => {
     await renderAuthenticatedApp();
 
     fireEvent.click(screen.getByRole("button", { name: /^focused$/i }));
-  fireEvent.change(screen.getByRole("combobox"), {
-    target: { value: "technical" },
-  });
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "technical" },
+    });
 
-    const initialPrompt = screen.getByTestId("prompt-text").textContent ?? "";
+    const initialPrompt = (await waitForPromptText()).textContent ?? "";
 
     fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
     const textbox = screen.getByRole("textbox", { name: /typing input/i });
@@ -347,7 +388,7 @@ describe("App", () => {
       fireEvent.click(screen.getByRole("button", { name: /^focused$/i }));
     });
 
-    const firstPrompt = screen.getByTestId("prompt-text").textContent ?? "";
+    const firstPrompt = (await waitForPromptText()).textContent ?? "";
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /start practice/i }));
@@ -410,6 +451,33 @@ describe("App", () => {
     expect(onInput).toHaveBeenNthCalledWith(2, "\t");
   });
 
+  it("renders the typing prompt inside the competitive arena structure", () => {
+    const sessionState = createSessionState("docker network connect internal-tools redis");
+
+    render(
+      <TypingPanel
+        content={{
+          id: "arena-structure",
+          category: "command",
+          topic: "docker",
+          difficulty: "medium",
+          length: "medium",
+          label: "Attach network",
+          prompt: "docker network connect internal-tools redis",
+        }}
+        sessionState={sessionState}
+        result={null}
+        onStart={() => {}}
+        onInput={() => {}}
+        onBackspace={() => {}}
+      />,
+    );
+
+    expect(screen.getByTestId("prompt-arena")).toBeInTheDocument();
+    expect(screen.getByTestId("prompt-surface")).toBeInTheDocument();
+    expect(screen.getByTestId("typing-metrics")).toBeInTheDocument();
+  });
+
   it("hydrates sidebar progress from /api/progress after login", async () => {
     vi.stubGlobal(
       "fetch",
@@ -454,6 +522,64 @@ describe("App", () => {
     expect(await screen.findByText(/1 unlocked/i)).toBeInTheDocument();
     expect(screen.getByText(/latest: 75 WPM/i)).toBeInTheDocument();
     expect(screen.getByText(/completed today/i)).toBeInTheDocument();
+  });
+
+  it("loads mixed mode prompts from the backend session api", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        mixedSessionItems: {
+          items: [
+            {
+              id: "db-mixed-1",
+              category: "code",
+              topic: "typescript",
+              difficulty: "medium",
+              length: "short",
+              label: "DB mixed prompt",
+              prompt:
+                "const total = prices.reduce((sum, price) => sum + price, 0);",
+            },
+          ],
+        },
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    expect(await screen.findByText(/db mixed prompt/i)).toBeInTheDocument();
+  });
+
+  it("loads focused prompts from the backend session api when the category changes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        focusedSessionItems: {
+          items: [
+            {
+              id: "db-focused-1",
+              category: "command",
+              topic: "git",
+              difficulty: "medium",
+              length: "short",
+              label: "DB focused prompt",
+              prompt: "git fetch origin feature/database-content",
+            },
+          ],
+        },
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    fireEvent.click(screen.getByRole("button", { name: /^focused$/i }));
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "command" },
+    });
+
+    expect(await screen.findByText(/db focused prompt/i)).toBeInTheDocument();
   });
 
   it("posts completed sessions and updates sidebar data from the backend response", async () => {
@@ -667,6 +793,128 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /save prompt/i }));
 
     expect(await screen.findByText(/typed formatter/i)).toBeInTheDocument();
+  });
+
+  it("opens an inline editor when editing an existing prompt", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        adminContentList: {
+          items: [
+            {
+              id: "content-1",
+              category: "code",
+              topic: "typescript",
+              difficulty: "medium",
+              length: "short",
+              label: "Typed formatter",
+              prompt: "const formatPrice = (value: number) => value.toFixed(2);",
+              isActive: true,
+              createdAt: "2026-05-05T12:00:00.000Z",
+              updatedAt: "2026-05-05T12:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    fireEvent.click(screen.getByRole("button", { name: /^admin$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+
+    expect(await screen.findByDisplayValue(/typed formatter/i)).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue(/const formatprice = \(value: number\) => value\.tofixed\(2\);/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows that content is the active admin tab and renders an empty state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        adminContentList: { items: [] },
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    fireEvent.click(screen.getByRole("button", { name: /^admin$/i }));
+
+    const contentTab = await screen.findByRole("button", { name: /^content$/i });
+    expect(contentTab.className).toContain("is-active");
+    expect(
+      screen.getByText(/no prompts yet\. create your first prompt to start managing content\./i),
+    ).toBeInTheDocument();
+  });
+
+  it("filters admin content by category, topic, and difficulty", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        adminContentList: {
+          items: [
+            {
+              id: "content-ts-1",
+              category: "code",
+              topic: "typescript",
+              difficulty: "medium",
+              length: "short",
+              label: "Typed formatter",
+              prompt: "const formatPrice = (value: number) => value.toFixed(2);",
+              isActive: true,
+              createdAt: "2026-05-05T12:00:00.000Z",
+              updatedAt: "2026-05-05T12:00:00.000Z",
+            },
+            {
+              id: "content-java-1",
+              category: "code",
+              topic: "java",
+              difficulty: "hard",
+              length: "medium",
+              label: "Build response entity",
+              prompt: "return ResponseEntity.status(HttpStatus.ACCEPTED).body(challengeSnapshot);",
+              isActive: true,
+              createdAt: "2026-05-05T12:00:00.000Z",
+              updatedAt: "2026-05-05T12:00:00.000Z",
+            },
+            {
+              id: "content-git-1",
+              category: "command",
+              topic: "git",
+              difficulty: "medium",
+              length: "short",
+              label: "Push feature branch",
+              prompt: "git push -u origin feature/database-backed-content",
+              isActive: true,
+              createdAt: "2026-05-05T12:00:00.000Z",
+              updatedAt: "2026-05-05T12:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /programmer typing trainer/i });
+    fireEvent.click(screen.getByRole("button", { name: /^admin$/i }));
+
+    fireEvent.change(await screen.findByRole("combobox", { name: /category filter/i }), {
+      target: { value: "code" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: /topic filter/i }), {
+      target: { value: "java" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: /difficulty filter/i }), {
+      target: { value: "hard" },
+    });
+
+    expect(await screen.findByText(/build response entity/i)).toBeInTheDocument();
+    expect(screen.queryByText(/typed formatter/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/push feature branch/i)).not.toBeInTheDocument();
   });
 
   it("hydrates daily challenge mode from the backend content source", async () => {
